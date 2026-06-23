@@ -430,7 +430,7 @@ function renderResidentProfile(room, bookings) {
     <div class="resident-header">
       <div class="resident-avatar">${room}</div>
       <div>
-        <div style="font-size:18px;font-weight:600;color:var(--text)">${room} 室</div>
+        <div style="font-size:18px;font-weight:600;color:var(--text)">${room}</div>
         <div style="font-size:13px;color:var(--text3)">首次: ${formatDate(bookings[bookings.length-1].date)} ｜ 最近: ${formatDate(bookings[0].date)}</div>
       </div>
     </div>
@@ -468,7 +468,7 @@ function renderAllResidents() {
       <div class="booking-item" onclick="selectResident('${room}')" style="cursor:pointer">
         <div class="resident-avatar" style="width:40px;height:40px;font-size:14px;border-radius:10px;flex-shrink:0">${room}</div>
         <div class="booking-body">
-          <div style="font-size:14px;font-weight:500;color:var(--text)">${room} 室</div>
+          <div style="font-size:14px;font-weight:500;color:var(--text)">${room}</div>
           <div class="booking-meta">
             <span>📅 ${d.count} 次</span>
             <span>💰 $${d.amount.toLocaleString()}</span>
