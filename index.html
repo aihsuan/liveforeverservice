@@ -89,6 +89,22 @@
       <h3>最近預約</h3>
       <div id="recent-bookings"></div>
     </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <h3 style="margin:0">接待人次 &amp; 預約筆數趨勢</h3>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-outline btn-sm" id="trend-btn-day" onclick="setTrendMode('day')" style="background:var(--accent);color:white;border-color:var(--accent)">日</button>
+          <button class="btn btn-outline btn-sm" id="trend-btn-week" onclick="setTrendMode('week')">週</button>
+          <button class="btn btn-outline btn-sm" id="trend-btn-month" onclick="setTrendMode('month')">月</button>
+        </div>
+      </div>
+      <div id="trend-chart"></div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text3);">
+        <span><span style="display:inline-block;width:10px;height:3px;background:var(--accent);border-radius:2px;vertical-align:middle;margin-right:4px"></span>接待人次</span>
+        <span><span style="display:inline-block;width:10px;height:3px;background:#4285f4;border-radius:2px;vertical-align:middle;margin-right:4px"></span>預約筆數</span>
+      </div>
+    </div>
   </div>
 
   <!-- ── TODAY ── -->
@@ -174,10 +190,12 @@
       <select id="filter-category" onchange="renderBookingList()">
         <option value="">所有類別</option>
         <option value="住戶接待">住戶接待</option>
+        <option value="餐飲消費">餐飲消費</option>
         <option value="節氣活動">節氣活動</option>
         <option value="包場">包場</option>
         <option value="分享活動">分享活動</option>
-        <option value="餐飲消費">餐飲消費</option>
+        <option value="森活聚落">森活聚落</option>
+        <option value="森活聚落活動">森活聚落活動</option>
       </select>
     </div>
     <div class="filter-row">

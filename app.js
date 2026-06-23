@@ -72,9 +72,14 @@ function switchTab(name) {
 // ── TODAY ──
 function goToday() { viewDay = new Date().toISOString().split('T')[0]; renderToday(); }
 function shiftDay(d) {
-  const dt = new Date(viewDay + 'T00:00:00');
+  // Parse date parts directly to avoid timezone issues
+  const parts = viewDay.split('-');
+  const dt = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
   dt.setDate(dt.getDate() + d);
-  viewDay = dt.toISOString().split('T')[0];
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  viewDay = y + '-' + m + '-' + day;
   renderToday();
 }
 
@@ -317,6 +322,8 @@ function renderOverview() {
   document.getElementById('recent-bookings').innerHTML = recent.length
     ? recent.map(b => miniBookingCard(b)).join('')
     : '<p style="color:var(--text3);font-size:13px;">尚無預約紀錄</p>';
+
+  renderTrendChart();
 }
 
 function miniBookingCard(b) {
@@ -548,6 +555,113 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
+// ── TREND CHART ──
+let trendMode = 'day';
+
+function setTrendMode(mode) {
+  trendMode = mode;
+  ['day','week','month'].forEach(m => {
+    const btn = document.getElementById('trend-btn-' + m);
+    if (!btn) return;
+    btn.style.background = m === mode ? 'var(--accent)' : '';
+    btn.style.color = m === mode ? 'white' : '';
+    btn.style.borderColor = m === mode ? 'var(--accent)' : '';
+  });
+  renderTrendChart();
+}
+
+function renderTrendChart() {
+  const el = document.getElementById('trend-chart');
+  if (!el) return;
+
+  const now = new Date();
+  let labels = [], personsData = [], countData = [];
+
+  if (trendMode === 'day') {
+    // Last 30 days
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      const day = (d.getMonth()+1) + '/' + d.getDate();
+      const bks = db.bookings.filter(b => b.date === key);
+      labels.push(day);
+      personsData.push(bks.reduce((s,b) => s+(b.persons||0), 0));
+      countData.push(bks.length);
+    }
+  } else if (trendMode === 'week') {
+    // Last 12 weeks
+    for (let i = 11; i >= 0; i--) {
+      const start = new Date(now);
+      start.setDate(start.getDate() - start.getDay() - i * 7);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      const startKey = start.getFullYear() + '-' + String(start.getMonth()+1).padStart(2,'0') + '-' + String(start.getDate()).padStart(2,'0');
+      const endKey = end.getFullYear() + '-' + String(end.getMonth()+1).padStart(2,'0') + '-' + String(end.getDate()).padStart(2,'0');
+      const bks = db.bookings.filter(b => b.date >= startKey && b.date <= endKey);
+      labels.push((start.getMonth()+1) + '/' + start.getDate());
+      personsData.push(bks.reduce((s,b) => s+(b.persons||0), 0));
+      countData.push(bks.length);
+    }
+  } else {
+    // Last 12 months
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+      const bks = db.bookings.filter(b => b.date.startsWith(ym));
+      labels.push((d.getMonth()+1) + '月');
+      personsData.push(bks.reduce((s,b) => s+(b.persons||0), 0));
+      countData.push(bks.length);
+    }
+  }
+
+  const maxP = Math.max(...personsData, 1);
+  const maxC = Math.max(...countData, 1);
+  const chartH = 100;
+  const n = labels.length;
+
+  // SVG line chart
+  const w = 600, h = chartH + 30;
+  const padL = 32, padR = 8, padT = 10, padB = 24;
+  const chartW = w - padL - padR;
+  const chartHH = h - padT - padB;
+
+  const xPos = i => padL + (i / (n - 1)) * chartW;
+  const yPosP = v => padT + chartHH - (v / maxP) * chartHH;
+  const yPosC = v => padT + chartHH - (v / maxC) * chartHH;
+
+  const personPath = personsData.map((v, i) => (i === 0 ? 'M' : 'L') + xPos(i).toFixed(1) + ',' + yPosP(v).toFixed(1)).join(' ');
+  const countPath = countData.map((v, i) => (i === 0 ? 'M' : 'L') + xPos(i).toFixed(1) + ',' + yPosC(v).toFixed(1)).join(' ');
+
+  // Show every Nth label to avoid crowding
+  const labelStep = n <= 12 ? 1 : n <= 20 ? 2 : 5;
+
+  const labelEls = labels.map((lbl, i) => {
+    if (i % labelStep !== 0 && i !== n - 1) return '';
+    return `<text x="${xPos(i).toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" fill="var(--text3)">${lbl}</text>`;
+  }).join('');
+
+  const dotEls = personsData.map((v, i) => v > 0
+    ? `<circle cx="${xPos(i).toFixed(1)}" cy="${yPosP(v).toFixed(1)}" r="2.5" fill="var(--accent)" opacity="0.8"/>`
+    : '').join('');
+
+  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;overflow:visible">
+    <!-- Grid lines -->
+    ${[0.25, 0.5, 0.75, 1].map(t => {
+      const y = (padT + chartHH - t * chartHH).toFixed(1);
+      const val = Math.round(maxP * t);
+      return `<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>
+               <text x="${padL - 4}" y="${y}" text-anchor="end" font-size="9" fill="var(--text3)" dominant-baseline="middle">${val}</text>`;
+    }).join('')}
+    <!-- Count line (blue, dashed) -->
+    <path d="${countPath}" fill="none" stroke="#4285f4" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.7"/>
+    <!-- Persons line (green) -->
+    <path d="${personPath}" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.9"/>
+    ${dotEls}
+    ${labelEls}
+  </svg>`;
+}
+
 // ── INIT ──
 function renderAll() {
   renderOverview();
@@ -590,7 +704,7 @@ function renderReport() {
   // Totals by category
   const reception = bookings.filter(b => b.category === '住戶接待');
   const venue = bookings.filter(b => b.category === '包場');
-  const activity = bookings.filter(b => b.category === '分享活動' || b.category === '節氣活動');
+  const activity = bookings.filter(b => b.category === '分享活動' || b.category === '節氣活動' || b.category === '森活聚落');
   const meal = bookings.filter(b => b.category === '餐飲消費');
 
   const sumPersons = arr => arr.reduce((s, b) => s + (b.persons || 0), 0);
@@ -756,7 +870,7 @@ async function exportReport() {
   const bookings = db.bookings.filter(b => b.date.startsWith(ym));
   const reception = bookings.filter(b => b.category === '住戶接待');
   const venue = bookings.filter(b => b.category === '包場');
-  const activity = bookings.filter(b => b.category === '分享活動' || b.category === '節氣活動');
+  const activity = bookings.filter(b => b.category === '分享活動' || b.category === '節氣活動' || b.category === '森活聚落');
   const meal = bookings.filter(b => b.category === '餐飲消費');
   const sumP = arr => arr.reduce((s,b) => s+(b.persons||0), 0);
 
@@ -1226,7 +1340,7 @@ function renderWeekdayChart(list) {
 }
 
 function renderCategoryChart(list) {
-  const CAT_COLORS = { '住戶接待':'#7ab648','包場':'#4285f4','分享活動':'#34a853','節氣活動':'#fbbc04','餐飲消費':'#ea4335','其他':'#9e9e9e' };
+  const CAT_COLORS = { '住戶接待':'#7ab648','包場':'#4285f4','分享活動':'#34a853','節氣活動':'#fbbc04','餐飲消費':'#ea4335','森活聚落':'#9b59b6','其他':'#9e9e9e' };
   const cats = {};
   list.forEach(b => {
     const c = b.category || '其他';

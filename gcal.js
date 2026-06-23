@@ -201,16 +201,18 @@ function parseGCalEvent(event) {
   // Category
   let category = '住戶接待';
   if (/包場/.test(title)) category = '包場';
-  else if (/分享活動/.test(title)) category = '分享活動';
+  else if (/森活聚落活動/.test(title)) category = '森活聚落活動';
+  else if (/分享活動|分享/.test(title)) category = '分享活動';
   else if (/節氣/.test(title)) category = '節氣活動';
   else if (/餐飲消費/.test(title)) category = '餐飲消費';
-  else if (/接待使用/.test(title)) category = '住戶接待';
+  else if (/森活聚落/.test(title)) category = '森活聚落';
+  else if (/接待使用|住戶接待/.test(title)) category = '住戶接待';
 
   // Service name
   const service = title.replace(/^T5[-_]?/, '').replace(/-\d+[A-Za-z]-\d+[Pp]$/, '').replace(/-\d+[Pp]$/, '').replace(/-\d+[A-Za-z]$/, '').trim() || title;
 
   // 分享活動: 1 booking, total persons, rooms in note
-  if (category === '分享活動') {
+  if (category === '分享活動' || category === '森活聚落') {
     const lines = body.split('\n').map(function(l) { return l.trim(); });
     const roomLines = lines.filter(function(l) { return /^\d+[A-Za-z]\s*[*xX]\s*\d+/.test(l); });
     if (roomLines.length > 0) {
@@ -245,7 +247,8 @@ function renderSyncPreview(events) {
     var parsed = parseGCalEvent(ev);
     parsed.forEach(function(b) {
       var exists = db.bookings.some(function(existing) {
-        return existing.gcalId === ev.id || (existing.date === b.date && existing.room === b.room && existing.time === b.time);
+        return existing.gcalId === ev.id || existing.gcal_id === ev.id ||
+               (existing.date === b.date && existing.room === b.room && existing.time === b.time);
       });
       gcalParsed.push(Object.assign({}, b, { _exists: exists, _selected: !exists, _raw: ev.summary }));
     });
@@ -265,7 +268,7 @@ function renderSyncPreview(events) {
   }
 
   previewEl.innerHTML = gcalParsed.map(function(b, i) {
-    var catMap = { '住戶接待': 'booking', '包場': 'venue', '分享活動': 'share', '餐飲消費': 'meal', '節氣活動': 'share' };
+    var catMap = { '住戶接待': 'booking', '包場': 'venue', '分享活動': 'share', '餐飲消費': 'meal', '節氣活動': 'share', '森活聚落': 'community' };
     var tag = '<span class="parse-tag ' + (catMap[b.category] || 'unknown') + '">' + b.category + '</span>';
     return '<div class="sync-preview-item">' +
       '<input type="checkbox" class="sync-checkbox" id="sync-cb-' + i + '" ' + (b._selected ? 'checked' : '') + ' ' + (b._exists ? 'disabled' : '') + ' onchange="gcalParsed[' + i + ']._selected=this.checked">' +

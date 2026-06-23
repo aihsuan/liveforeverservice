@@ -2,6 +2,27 @@
 const SUPABASE_URL = 'https://uzbzxxkrtvexymtginbx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_KAXm649e5TRLNAqbOerduA_vBngU3Xg';
 
+// Convert camelCase JS object to snake_case for Supabase
+function toSnakeCase(b) {
+  return {
+    id: b.id,
+    community: b.community || currentCommunity || 'T5',
+    date: b.date,
+    time: b.time || '00:00',
+    room: b.room || '?',
+    floor: b.floor || '',
+    unit: b.unit || '',
+    persons: b.persons || 1,
+    service: b.service || '',
+    category: b.category || '住戶接待',
+    amount: b.amount || 0,
+    note: b.note || '',
+    staff: b.staff || '',
+    source: b.source || 'gcal',
+    gcal_id: b.gcalId || b.gcal_id || null,
+  };
+}
+
 const sb = {
   async query(method, path, body) {
     const resp = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
@@ -24,13 +45,15 @@ const sb = {
 
   // Load all bookings for a community
   async loadBookings(community) {
-    return await sb.query('GET', 'bookings?community=eq.' + encodeURIComponent(community) + '&order=date.desc,time.desc&limit=2000');
+    const rows = await sb.query('GET', 'bookings?community=eq.' + encodeURIComponent(community) + '&order=date.desc,time.desc&limit=2000');
+    return rows.map(r => Object.assign({}, r, { gcalId: r.gcal_id }));
   },
 
   // Upsert (insert or update) bookings
   async upsertBookings(bookings) {
     if (!bookings.length) return [];
-    return await sb.query('POST', 'bookings', bookings);
+    const rows = bookings.map(toSnakeCase);
+    return await sb.query('POST', 'bookings', rows);
   },
 
   // Delete a booking
@@ -44,7 +67,7 @@ const sb = {
   // Check which gcal_ids already exist for a community
   async getExistingGcalIds(community) {
     const rows = await sb.query('GET', 'bookings?community=eq.' + encodeURIComponent(community) + '&gcal_id=not.is.null&select=gcal_id');
-    return new Set(rows.map(r => r.gcal_id));
+    return new Set(rows.map(r => r.gcal_id).filter(Boolean));
   },
 };
 
@@ -66,18 +89,31 @@ let pendingSyncCount = 0; // gcal events parsed but not yet saved
 async function initSupabase() {
   currentCommunity = getCurrentCommunity();
   updateCommunityBadge();
-  try {
+
+  // First: load from localStorage cache for instant display
+  const cacheKey = 'T5_cache_' + currentCommunity;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      db.bookings = JSON.parse(cached);
+      renderAll();
+      showDbStatus('loading', '');
+    } catch(_) {}
+  } else {
     showDbStatus('loading');
+  }
+
+  // Then: fetch from Supabase and update
+  try {
     const rows = await sb.loadBookings(currentCommunity);
     db.bookings = rows;
+    // Save to localStorage cache
+    try { localStorage.setItem(cacheKey, JSON.stringify(rows)); } catch(_) {}
     renderAll();
     showDbStatus('ok', rows.length + ' 筆');
   } catch(e) {
-    showDbStatus('error', e.message);
-    showToast('Supabase 連線失敗，使用本地快取');
-    // Fallback to localStorage
-    const local = localStorage.getItem('T5_bookings_v1');
-    if (local) { try { db = JSON.parse(local); renderAll(); } catch(_) {} }
+    showDbStatus('error', '離線模式');
+    if (!cached) showToast('Supabase 連線失敗，使用本地快取');
   }
 }
 
@@ -145,10 +181,12 @@ async function commitSyncToSupabase() {
     });
     await sb.upsertBookings(records);
 
-    // Update local db
+    // Update local db and cache
     records.forEach(r => {
       if (!db.bookings.find(b => b.id === r.id)) db.bookings.push(r);
     });
+    const cacheKey = 'T5_cache_' + currentCommunity;
+    try { localStorage.setItem(cacheKey, JSON.stringify(db.bookings)); } catch(_) {}
     renderAll();
     updateSyncBadge(0);
     showToast('✓ 已同步 ' + records.length + ' 筆到 Supabase');
@@ -214,14 +252,22 @@ function selectCommunity(community, calId, label) {
   // Reload data from Supabase for this community
   currentCommunity = community;
   showDbStatus('loading');
+  // Load from cache first
+  const cacheKey = 'T5_cache_' + community;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try { db.bookings = JSON.parse(cached); renderAll(); } catch(_) {}
+  }
+  showDbStatus('loading');
   sb.loadBookings(community).then(rows => {
     db.bookings = rows;
+    try { localStorage.setItem(cacheKey, JSON.stringify(rows)); } catch(_) {}
     renderAll();
     showDbStatus('ok', rows.length + ' 筆');
     showToast('已切換至 ' + label);
   }).catch(e => {
-    showDbStatus('error', e.message);
-    showToast('載入失敗：' + e.message);
+    showDbStatus('error', '離線模式');
+    showToast('載入失敗，使用快取');
   });
 }
 
