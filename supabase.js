@@ -89,31 +89,15 @@ let pendingSyncCount = 0; // gcal events parsed but not yet saved
 async function initSupabase() {
   currentCommunity = getCurrentCommunity();
   updateCommunityBadge();
-
-  // First: load from localStorage cache for instant display
-  const cacheKey = 'T5_cache_' + currentCommunity;
-  const cached = localStorage.getItem(cacheKey);
-  if (cached) {
-    try {
-      db.bookings = JSON.parse(cached);
-      renderAll();
-      showDbStatus('loading', '');
-    } catch(_) {}
-  } else {
-    showDbStatus('loading');
-  }
-
-  // Then: fetch from Supabase and update
+  showDbStatus('loading');
   try {
     const rows = await sb.loadBookings(currentCommunity);
     db.bookings = rows;
-    // Save to localStorage cache
-    try { localStorage.setItem(cacheKey, JSON.stringify(rows)); } catch(_) {}
     renderAll();
     showDbStatus('ok', rows.length + ' 筆');
   } catch(e) {
-    showDbStatus('error', '離線模式');
-    if (!cached) showToast('Supabase 連線失敗，使用本地快取');
+    showDbStatus('error', '連線失敗');
+    showToast('Supabase 連線失敗：' + e.message);
   }
 }
 
@@ -181,12 +165,10 @@ async function commitSyncToSupabase() {
     });
     await sb.upsertBookings(records);
 
-    // Update local db and cache
+    // Update local db
     records.forEach(r => {
       if (!db.bookings.find(b => b.id === r.id)) db.bookings.push(r);
     });
-    const cacheKey = 'T5_cache_' + currentCommunity;
-    try { localStorage.setItem(cacheKey, JSON.stringify(db.bookings)); } catch(_) {}
     renderAll();
     updateSyncBadge(0);
     showToast('✓ 已同步 ' + records.length + ' 筆到 Supabase');
@@ -252,22 +234,17 @@ function selectCommunity(community, calId, label) {
   // Reload data from Supabase for this community
   currentCommunity = community;
   showDbStatus('loading');
-  // Load from cache first
-  const cacheKey = 'T5_cache_' + community;
-  const cached = localStorage.getItem(cacheKey);
-  if (cached) {
-    try { db.bookings = JSON.parse(cached); renderAll(); } catch(_) {}
-  }
+  db.bookings = [];
+  renderAll();
   showDbStatus('loading');
   sb.loadBookings(community).then(rows => {
     db.bookings = rows;
-    try { localStorage.setItem(cacheKey, JSON.stringify(rows)); } catch(_) {}
     renderAll();
     showDbStatus('ok', rows.length + ' 筆');
     showToast('已切換至 ' + label);
   }).catch(e => {
-    showDbStatus('error', '離線模式');
-    showToast('載入失敗，使用快取');
+    showDbStatus('error', '連線失敗');
+    showToast('載入失敗：' + e.message);
   });
 }
 

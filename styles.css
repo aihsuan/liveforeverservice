@@ -412,12 +412,64 @@ textarea { resize: vertical; min-height: 72px; }
 .parse-tag.share { background: #e6f4ea; color: #1e7e34; border-color: #b7dfbe; }
 .parse-tag.meal { background: #fff3e0; color: #e65100; border-color: #ffcc80; }
 .parse-tag.unknown { background: var(--surface2); color: var(--text3); border-color: var(--border); }
+.parse-tag.community { background: #f3e8ff; color: #7b2d8b; border-color: #d8b4fe; }
 
-@media (max-width: 600px) {
-  .stats-grid { grid-template-columns: 1fr 1fr; }
+@media (max-width: 768px) {
+  /* Header */
+  .header-inner { gap: 6px; height: auto; min-height: 52px; padding: 6px 0; flex-wrap: nowrap; }
+  header h1 { font-size: 15px; }
+  .header-time { display: none; }
+  #db-status { display: none; }
+  #community-switcher button { padding: 4px 8px; font-size: 12px; }
+  .header-gcal-btn { padding: 4px 10px; font-size: 12px; }
+  #header-sync-btn { padding: 4px 10px; font-size: 12px; }
+
+  /* Nav */
+  nav { padding: 0 12px; }
+  .nav-tab { padding: 10px 10px; font-size: 13px; }
+
+  /* Main */
+  main { padding: 16px 12px; }
+
+  /* Stats */
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .stat-value { font-size: 22px; }
+
+  /* Resident */
   .resident-stats { grid-template-columns: repeat(3, 1fr); }
+  .resident-avatar { width: 40px; height: 40px; font-size: 14px; }
+
+  /* Forms */
   .form-grid { grid-template-columns: 1fr; }
   .form-group.full { grid-column: 1; }
+
+  /* Timeline */
+  .timeline-time { width: 36px; font-size: 11px; }
+
+  /* Booking item */
+  .booking-item { padding: 10px 12px; gap: 10px; }
+  .booking-date-col { min-width: 44px; padding: 6px 8px; }
+  .booking-day { font-size: 18px; }
+
+  /* Community dropdown */
+  #community-dropdown { min-width: 140px; width: 140px; right: 0; }
+
+  /* Report stats */
+  #report-stats { grid-template-columns: repeat(2, 1fr) !important; }
+  #analytics-stats { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Monthly calendar */
+  .cal-day { min-height: 30px; font-size: 11px; }
+
+  /* Cards */
+  .card { padding: 12px 14px; }
+}
+
+@media (max-width: 400px) {
+  .nav-tab { padding: 10px 7px; font-size: 12px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-value { font-size: 20px; }
+  .header-inner { padding: 4px 0; }
 }
 
 /* ── Header Google button ── */
