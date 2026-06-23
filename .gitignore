@@ -1,0 +1,7 @@
+# Sensitive config - do not commit
+config.js
+
+# System files
+.DS_Store
+Thumbs.db
+*.log
