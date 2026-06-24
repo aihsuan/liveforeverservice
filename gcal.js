@@ -254,6 +254,8 @@ function parseGCalEvent(event) {
 
   // Service name
   const service = title.replace(/^T[357][-_]?/, '').replace(/-\d+[A-Za-z]-\d+[Pp]$/, '').replace(/-\d+[Pp]$/, '').replace(/-\d+[A-Za-z]$/, '').trim() || title;
+  // Clean body - remove 更正/修正 prefix
+  const cleanBody = body.replace(/^(更正|修正)[：:]\s*/m, '').trim();
 
   // 分享活動: 1 booking, total persons, rooms in note
   if (category === '分享活動' || category === '森活聚落') {
@@ -268,7 +270,7 @@ function parseGCalEvent(event) {
       }).join(' ');
       return [{ id: genId(), gcalId: event.id, date: dateStr, time: timeStr, community: _comm, room: '多戶', floor: '', unit: '', persons: totalPersons, service: service, category: category, amount: 0, note: roomNote, staff: '', source: 'gcal' }];
     }
-    return [{ id: genId(), gcalId: event.id, date: dateStr, time: timeStr, community: _comm, room: '多戶', floor: '', unit: '', persons: 1, service: service, category: category, amount: 0, note: body.substring(0, 300), staff: '', source: 'gcal' }];
+    return [{ id: genId(), gcalId: event.id, date: dateStr, time: timeStr, community: _comm, room: '多戶', floor: '', unit: '', persons: 1, service: service, category: category, amount: 0, note: cleanBody.substring(0, 300), staff: '', source: 'gcal' }];
   }
 
   // Others: extract room and persons from title
@@ -277,7 +279,7 @@ function parseGCalEvent(event) {
   var room = roomMatch ? roomMatch[1].toUpperCase() : '?';
   var persons = personsMatch ? parseInt(personsMatch[1]) : 1;
   var parsed = parseRoom(room);
-  return [{ id: genId(), gcalId: event.id, date: dateStr, time: timeStr, community: _comm, room: room, floor: parsed.floor, unit: parsed.unit, persons: persons, service: service, category: category, amount: 0, note: body.substring(0, 300), staff: '', source: 'gcal' }];
+  return [{ id: genId(), gcalId: event.id, date: dateStr, time: timeStr, community: _comm, room: room, floor: parsed.floor, unit: parsed.unit, persons: persons, service: service, category: category, amount: 0, note: cleanBody.substring(0, 300), staff: '', source: 'gcal' }];
 }
 
 
@@ -394,10 +396,24 @@ function renderSyncPreview(events) {
     if (!ev.summary || ev.summary.indexOf(_filterComm) === -1) return;
     var parsed = parseGCalEvent(ev);
     parsed.forEach(function(b) {
-      var exists = db.bookings.some(function(existing) {
-        return existing.gcalId === ev.id || existing.gcal_id === ev.id ||
-               (existing.date === b.date && existing.room === b.room && existing.time === b.time);
+      // Check if exists AND unchanged
+      var existingRecord = db.bookings.find(function(existing) {
+        return existing.gcalId === ev.id || existing.gcal_id === ev.id;
       });
+      var exists = false;
+      if (existingRecord) {
+        // Check if content changed (service name or note)
+        var serviceChanged = existingRecord.service !== b.service;
+        var noteChanged = (existingRecord.note || '') !== (b.note || '');
+        if (serviceChanged || noteChanged) {
+          // Content changed - mark for update
+          b.id = existingRecord.id; // keep same id for upsert
+          exists = false; // treat as new to trigger update
+          b._updated = true;
+        } else {
+          exists = true;
+        }
+      }
       gcalParsed.push(Object.assign({}, b, { _exists: exists, _selected: !exists, _raw: ev.summary }));
     });
   });
@@ -423,7 +439,7 @@ function renderSyncPreview(events) {
       '<div class="sync-preview-body">' +
         '<div class="sync-preview-title">' +
           '<span class="room-badge" style="font-size:11px;padding:1px 7px">' + (b.room === '?' ? (b.community || 'T5') : b.room) + '</span> ' + b.service + ' ' +
-          (b._exists ? '<span class="sync-badge-exists">已存在</span>' : '<span class="sync-badge-new">新增</span>') +
+          (b._exists ? '<span class="sync-badge-exists">已存在</span>' : b._updated ? '<span class="sync-badge-new" style="background:#fbbc04;color:#1a1a1a">更新</span>' : '<span class="sync-badge-new">新增</span>') +
         '</div>' +
         '<div class="sync-preview-meta">' +
           '<span>📅 ' + b.date + '</span><span>🕐 ' + b.time + '</span><span>👥 ' + b.persons + ' 人</span><span>' + tag + '</span>' +
