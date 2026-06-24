@@ -79,7 +79,7 @@ function connectGoogle() {
   _buildTokenClient(GCAL_CONFIG.clientId);
   if (!tokenClient) { showToast('Google 服務載入中，請稍候再試'); return; }
   setGcalStatus('loading');
-  tokenClient.requestAccessToken({ prompt: '' });
+  tokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 function showClientIdModal() {
@@ -178,27 +178,53 @@ function handleHeaderGcalClick() {
 async function fetchCalendarEvents() {
   if (!gcalAccessToken) return;
   setGcalStatus('loading');
-  const syncMonths = parseInt(document.getElementById('sync-months').value) || 2;
   const now = new Date();
-  const timeMin = new Date(now.getFullYear(), now.getMonth() - syncMonths + 1, 1).toISOString();
-  const timeMax = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+  const syncRange = document.getElementById('sync-months')?.value || 'default';
+  let timeMin, timeMax;
+  if (syncRange === 'curr') {
+    // 本月 + 未來 6 個月（自動偵測用）
+    timeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    timeMax = new Date(now.getFullYear(), now.getMonth() + 7, 0, 23, 59, 59).toISOString();
+  } else if (syncRange === 'past3') {
+    // 過去 3 個月 + 本月（手動補資料用）
+    timeMin = new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString();
+    timeMax = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+  } else if (syncRange === 'next6') {
+    // 未來 6 個月（手動補未來資料用）
+    timeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    timeMax = new Date(now.getFullYear(), now.getMonth() + 7, 0, 23, 59, 59).toISOString();
+  } else {
+    // default: 本月 + 未來 6 個月（自動偵測預設）
+    timeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    timeMax = new Date(now.getFullYear(), now.getMonth() + 7, 0, 23, 59, 59).toISOString();
+  }
   try {
     // Auto-select calendar based on current community
     const _community = typeof currentCommunity !== 'undefined' ? currentCommunity : 'T5';
     const calId = COMMUNITY_CAL[_community] || GCAL_CONFIG.calendarId;
     GCAL_CONFIG.calendarId = calId;
-    const url = new URL('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(calId) + '/events');
-    url.searchParams.set('timeMin', timeMin);
-    url.searchParams.set('timeMax', timeMax);
-    url.searchParams.set('singleEvents', 'true');
-    url.searchParams.set('orderBy', 'startTime');
-    url.searchParams.set('maxResults', '500');
-    const resp = await fetch(url.toString(), { headers: { Authorization: 'Bearer ' + gcalAccessToken } });
-    if (resp.status === 401) { gcalAccessToken = null; setGcalStatus('disconnected'); showToast('授權已過期，請重新連結'); return; }
-    const data = await resp.json();
+    // Fetch all pages
+    let allItems = [];
+    let pageToken = null;
+    let pageCount = 0;
+    do {
+      const url = new URL('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(calId) + '/events');
+      url.searchParams.set('timeMin', timeMin);
+      url.searchParams.set('timeMax', timeMax);
+      url.searchParams.set('singleEvents', 'true');
+      url.searchParams.set('orderBy', 'startTime');
+      url.searchParams.set('maxResults', '500');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const resp = await fetch(url.toString(), { headers: { Authorization: 'Bearer ' + gcalAccessToken } });
+      if (resp.status === 401) { gcalAccessToken = null; setGcalStatus('disconnected'); showToast('授權已過期，請重新連結'); return; }
+      const data = await resp.json();
+      if (data.error) { showToast('API 錯誤：' + data.error.message); return; }
+      allItems = allItems.concat(data.items || []);
+      pageToken = data.nextPageToken || null;
+      pageCount++;
+    } while (pageToken && pageCount < 10);
     setGcalStatus('connected');
-    if (data.error) { showToast('API 錯誤：' + data.error.message); return; }
-    renderSyncPreview(data.items || []);
+    renderSyncPreview(allItems);
   } catch (e) {
     setGcalStatus('connected');
     showToast('讀取行事曆失敗：' + e.message);
@@ -227,7 +253,7 @@ function parseGCalEvent(event) {
   else if (/接待使用|住戶接待/.test(title)) category = '住戶接待';
 
   // Service name
-  const service = title.replace(/^T5[-_]?/, '').replace(/-\d+[A-Za-z]-\d+[Pp]$/, '').replace(/-\d+[Pp]$/, '').replace(/-\d+[A-Za-z]$/, '').trim() || title;
+  const service = title.replace(/^T[357][-_]?/, '').replace(/-\d+[A-Za-z]-\d+[Pp]$/, '').replace(/-\d+[Pp]$/, '').replace(/-\d+[A-Za-z]$/, '').trim() || title;
 
   // 分享活動: 1 booking, total persons, rooms in note
   if (category === '分享活動' || category === '森活聚落') {
@@ -254,13 +280,117 @@ function parseGCalEvent(event) {
   return [{ id: genId(), gcalId: event.id, date: dateStr, time: timeStr, community: _comm, room: room, floor: parsed.floor, unit: parsed.unit, persons: persons, service: service, category: category, amount: 0, note: body.substring(0, 300), staff: '', source: 'gcal' }];
 }
 
+
+// Notification system
+var notifItems = [];
+
+function addNotif(message, type) {
+  const notif = { id: Date.now(), message: message, type: type || 'info', time: new Date().toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit'}) };
+  notifItems.unshift(notif);
+  if (notifItems.length > 20) notifItems.pop();
+  renderNotifPanel();
+  showNotifDot(true);
+  const bell = document.getElementById('header-notif');
+  if (bell) bell.style.display = 'inline-flex';
+}
+
+function renderNotifPanel() {
+  const list = document.getElementById('notif-list');
+  if (!list) return;
+  if (!notifItems.length) {
+    list.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--text3)">沒有新通知</div>';
+    return;
+  }
+  list.innerHTML = notifItems.map(n => {
+    const icon = n.type === 'sync' ? '☁️' : n.type === 'warn' ? '⚠️' : '📅';
+    return '<div style="padding:10px 16px;border-bottom:0.5px solid var(--border);font-size:13px;">' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span>' + icon + '</span>' +
+        '<span style="flex:1;color:var(--text)">' + n.message + '</span>' +
+        '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + n.time + '</span>' +
+      '</div></div>';
+  }).join('');
+}
+
+function showNotifDot(show) {
+  const dot = document.getElementById('notif-dot');
+  if (dot) dot.style.display = show ? 'block' : 'none';
+}
+
+function toggleNotifPanel() {
+  const panel = document.getElementById('notif-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') {
+    showNotifDot(false);
+    setTimeout(() => document.addEventListener('click', closeNotifOnOutside, { once: true }), 10);
+  }
+}
+
+function closeNotifOnOutside(e) {
+  const notif = document.getElementById('header-notif');
+  if (notif && !notif.contains(e.target)) {
+    const panel = document.getElementById('notif-panel');
+    if (panel) panel.style.display = 'none';
+  }
+}
+
+function clearNotifs() {
+  notifItems = [];
+  renderNotifPanel();
+  showNotifDot(false);
+  const bell = document.getElementById('header-notif');
+  if (bell) bell.style.display = 'none';
+}
+
+// Auto sync new items to Supabase without manual confirm
+async function autoSyncToSupabase(newItems) {
+  if (!newItems || !newItems.length) return;
+  try {
+    const comm = typeof currentCommunity !== 'undefined' ? currentCommunity : 'T5';
+    const records = newItems.map(b => {
+      const { _exists, _selected, _raw, ...clean } = b;
+      clean.community = comm;
+      return clean;
+    });
+    await sb.upsertBookings(records);
+
+    // Update local db
+    records.forEach(r => {
+      if (!db.bookings.find(b => b.id === r.id)) db.bookings.push(r);
+    });
+
+    // Mark as synced
+    gcalParsed.forEach(b => {
+      b._exists = db.bookings.some(ex => ex.gcalId === b.gcalId || ex.gcal_id === b.gcalId);
+      b._selected = !b._exists;
+    });
+
+    renderAll();
+    updateSyncBadge(0);
+
+    // Add notification
+    addNotif(comm + ' 行事曆新增 ' + records.length + ' 筆預約已自動同步', 'sync');
+    showToast('✓ ' + comm + ' 已自動同步 ' + records.length + ' 筆');
+
+    document.getElementById('sync-actions').style.display = 'none';
+    const header = document.getElementById('gcal-preview-header');
+    if (header) header.innerHTML = '✓ 已同步完成，' + comm + ' 新增 <strong>' + records.length + '</strong> 筆';
+
+  } catch(e) {
+    showToast('自動同步失敗，請手動同步');
+    updateSyncBadge(newItems.length);
+    addNotif('自動同步失敗：' + e.message, 'warn');
+  }
+}
+
 // ── Render sync preview ──
 var gcalParsed = [];
 
 function renderSyncPreview(events) {
   gcalParsed = [];
+  var _filterComm = typeof currentCommunity !== 'undefined' ? currentCommunity : 'T5';
   events.forEach(function(ev) {
-    var _filterComm = typeof currentCommunity !== 'undefined' ? currentCommunity : 'T5';
     if (!ev.summary || ev.summary.indexOf(_filterComm) === -1) return;
     var parsed = parseGCalEvent(ev);
     parsed.forEach(function(b) {
@@ -292,7 +422,7 @@ function renderSyncPreview(events) {
       '<input type="checkbox" class="sync-checkbox" id="sync-cb-' + i + '" ' + (b._selected ? 'checked' : '') + ' ' + (b._exists ? 'disabled' : '') + ' onchange="gcalParsed[' + i + ']._selected=this.checked">' +
       '<div class="sync-preview-body">' +
         '<div class="sync-preview-title">' +
-          '<span class="room-badge" style="font-size:11px;padding:1px 7px">' + b.room + '</span> ' + b.service + ' ' +
+          '<span class="room-badge" style="font-size:11px;padding:1px 7px">' + (b.room === '?' ? (b.community || 'T5') : b.room) + '</span> ' + b.service + ' ' +
           (b._exists ? '<span class="sync-badge-exists">已存在</span>' : '<span class="sync-badge-new">新增</span>') +
         '</div>' +
         '<div class="sync-preview-meta">' +
@@ -302,11 +432,16 @@ function renderSyncPreview(events) {
         '<div style="margin-top:3px;font-size:10px;color:var(--text3)">原始：' + b._raw + '</div>' +
       '</div></div>';
   }).join('');
-  document.getElementById('sync-actions').style.display = 'flex';
+  // Auto-upload new items to Supabase silently
+  const newItems = gcalParsed.filter(b => !b._exists);
+  if (newItems.length > 0) {
+    autoSyncToSupabase(newItems);
+  } else {
+    // No new items — hide sync button
+    if (typeof updateSyncBadge === 'function') updateSyncBadge(0);
+  }
 
-  // Update header sync badge with count of new items
-  const pendingCount = gcalParsed.filter(b => !b._exists).length;
-  if (typeof updateSyncBadge === 'function') updateSyncBadge(pendingCount);
+  document.getElementById('sync-actions').style.display = newItems.length > 0 ? 'flex' : 'none';
 }
 
 function selectAllNew() {

@@ -32,6 +32,19 @@
       style="display:none;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:#fbbc04;color:#1a1a1a;font-family:inherit;flex-shrink:0;">
       ☁️ 同步 <span id="sync-pending-badge" style="background:#c0392b;color:white;border-radius:10px;padding:0 6px;font-size:11px;"></span>
     </button>
+    <div id="header-notif" style="display:none;position:relative;flex-shrink:0;">
+      <button onclick="toggleNotifPanel()" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--surface2);border:0.5px solid var(--border-strong);cursor:pointer;position:relative;">
+        🔔
+        <span id="notif-dot" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#ea4335;"></span>
+      </button>
+      <div id="notif-panel" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:var(--surface);border:0.5px solid var(--border-strong);border-radius:14px;min-width:280px;max-width:340px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:300;overflow:hidden;">
+        <div style="padding:12px 16px;border-bottom:0.5px solid var(--border);font-size:13px;font-weight:600;color:var(--text)">行事曆異動通知</div>
+        <div id="notif-list" style="max-height:300px;overflow-y:auto;"></div>
+        <div style="padding:10px 16px;border-top:0.5px solid var(--border);">
+          <button onclick="clearNotifs()" style="font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;">清除全部</button>
+        </div>
+      </div>
+    </div>
     <button class="header-gcal-btn" id="header-gcal-btn" onclick="handleHeaderGcalClick()" title="連結 Google Calendar">
       <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
       <span id="header-gcal-label">登入</span>
@@ -236,10 +249,9 @@
         <div class="form-group">
           <label>讀取範圍</label>
           <select id="sync-months">
-            <option value="1">本月</option>
-            <option value="2" selected>最近 2 個月</option>
-            <option value="3">最近 3 個月</option>
-            <option value="6">最近 6 個月</option>
+            <option value="default" selected>本月 + 未來 6 個月（自動偵測）</option>
+            <option value="past3">過去 3 個月（手動補資料）</option>
+            <option value="next6">未來 6 個月（手動補未來）</option>
           </select>
         </div>
         <div class="form-group">
@@ -266,8 +278,7 @@
     <div id="gcal-preview"></div>
 
     <div id="sync-actions" style="display:none;gap:10px;margin-top:16px;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="importSelected()">匯入選取的項目</button>
-      <button class="btn btn-outline btn-sm" onclick="selectAllNew()">全選新增項目</button>
+      <button class="btn btn-primary" onclick="commitSyncToSupabase()">☁️ 手動同步到 Supabase</button>
     </div>
 
 

@@ -131,7 +131,7 @@ function renderToday() {
           : bookings.map(b => `
             <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
-                <span class="room-badge${b.source==='gcal'?' gcal':''}" style="font-size:12px">${b.room}</span>
+                <span class="room-badge${b.source==='gcal'?' gcal':''}" style="font-size:12px">${b.room === '?' ? (b.community || 'T5') : b.room}</span>
                 <span style="font-size:13px;font-weight:500;color:var(--text)">${b.service}</span>
                 <span style="font-size:11px;color:var(--text3)">${b.time}</span>
                 ${b.source==='gcal' ? '<span class="source-tag">Google Calendar</span>' : ''}
@@ -328,7 +328,7 @@ function renderOverview() {
 
 function miniBookingCard(b) {
   return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--border);">
-    <span class="room-badge${b.source==='gcal'?' gcal':''}" style="font-size:12px;padding:2px 8px">${b.room}</span>
+    <span class="room-badge${b.source==='gcal'?' gcal':''}" style="font-size:12px;padding:2px 8px">${b.room === '?' ? (b.community || 'T5') : b.room}</span>
     <span style="flex:1;font-size:13px;color:var(--text)">${b.service}</span>
     <span style="font-size:12px;color:${b.amount>0?'var(--green-800)':'var(--text3)'};font-weight:${b.amount>0?600:400}">${formatMoney(b.amount)}</span>
     <span style="font-size:11px;color:var(--text3);white-space:nowrap">${formatDate(b.date)}</span>
@@ -368,7 +368,7 @@ function bookingCard(b) {
     </div>
     <div class="booking-body">
       <div class="booking-header">
-        <span class="room-badge${b.source==='gcal'?' gcal':''}">${b.room}</span>
+        <span class="room-badge${b.source==='gcal'?' gcal':''}">${b.room === '?' ? (b.community || 'T5') : b.room}</span>
         <span class="service-name">${b.service}</span>
         ${b.source === 'gcal' ? '<span class="source-tag">Google Calendar</span>' : ''}
       </div>
