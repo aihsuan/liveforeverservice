@@ -27,7 +27,11 @@ function getSavedClientId() { return GCAL_CONFIG.clientId; }
 function saveClientId(id) { /* hardcoded, no-op */ }
 
 function initGoogleAuth() {
-  if (typeof google === 'undefined') return;
+  if (typeof google === 'undefined') {
+    // Google script not loaded yet, show login screen
+    setTimeout(initGoogleAuth, 500);
+    return;
+  }
   _buildTokenClient(GCAL_CONFIG.clientId);
 
   // Restore saved token if still valid
@@ -36,8 +40,15 @@ function initGoogleAuth() {
     if (saved && saved.expiry > Date.now() + 60000) {
       gcalAccessToken = saved.token;
       setGcalStatus('connected');
+      hideLoginScreen();
+      // Token valid — load Supabase data
+      if (typeof initSupabase === 'function') initSupabase();
+      return;
     }
   } catch(e) {}
+
+  // No valid token — show login screen
+  if (typeof showLoginScreen === 'function') showLoginScreen();
 }
 
 function _buildTokenClient(clientId) {
@@ -51,8 +62,15 @@ function _buildTokenClient(clientId) {
       const expiry = Date.now() + 55 * 60 * 1000;
       localStorage.setItem('T5_gcal_token', JSON.stringify({ token: resp.access_token, expiry }));
       setGcalStatus('connected');
-      showToast('已連結 Google Calendar');
-      fetchCalendarEvents();
+      hideLoginScreen();
+      // Load Supabase data first, then auto-check calendar for new events
+      if (typeof initSupabase === 'function') {
+        initSupabase().then(() => {
+          fetchCalendarEvents();
+        });
+      } else {
+        fetchCalendarEvents();
+      }
     },
   });
 }

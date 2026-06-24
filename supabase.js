@@ -86,16 +86,50 @@ function getCurrentCommunity() {
 let currentCommunity = 'T5';
 let pendingSyncCount = 0; // gcal events parsed but not yet saved
 
+function setLoadingProgress(pct, text) {
+  const bar = document.getElementById('loading-bar');
+  const txt = document.getElementById('loading-text');
+  if (bar) bar.style.width = pct + '%';
+  if (txt && text) txt.textContent = text;
+}
+
+function hideLoadingOverlay() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) {
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s';
+    setTimeout(() => { overlay.style.display = 'none'; }, 300);
+  }
+}
+
+function showLoginScreen() {
+  const overlay = document.getElementById('loading-overlay');
+  const login = document.getElementById('login-screen');
+  if (overlay) overlay.style.display = 'none';
+  if (login) login.style.display = 'flex';
+}
+
+function hideLoginScreen() {
+  const login = document.getElementById('login-screen');
+  if (login) login.style.display = 'none';
+}
+
 async function initSupabase() {
   currentCommunity = getCurrentCommunity();
   updateCommunityBadge();
-  showDbStatus('loading');
+  setLoadingProgress(10, '連線中...');
+  await new Promise(r => setTimeout(r, 50)); // let UI update
+  setLoadingProgress(30, '讀取資料中...');
   try {
     const rows = await sb.loadBookings(currentCommunity);
     db.bookings = rows;
+    setLoadingProgress(90, '載入完成');
     renderAll();
+    setLoadingProgress(100, '');
+    setTimeout(hideLoadingOverlay, 200);
     showDbStatus('ok', rows.length + ' 筆');
   } catch(e) {
+    hideLoadingOverlay();
     showDbStatus('error', '連線失敗');
     showToast('Supabase 連線失敗：' + e.message);
   }
@@ -241,7 +275,7 @@ function selectCommunity(community, calId, label) {
     db.bookings = rows;
     renderAll();
     showDbStatus('ok', rows.length + ' 筆');
-    showToast('已切換至 ' + label);
+    showToast('✓ ' + label + '  ' + rows.length + ' 筆');
   }).catch(e => {
     showDbStatus('error', '連線失敗');
     showToast('載入失敗：' + e.message);

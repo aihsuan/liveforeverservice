@@ -511,7 +511,7 @@ function addBooking() {
 }
 
 function resetForm() {
-  document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+  // f-date removed (add booking tab removed)
   document.getElementById('f-time').value = '10:00';
   document.getElementById('f-room').value = '';
   document.getElementById('f-persons').value = '2';
@@ -1175,7 +1175,7 @@ ${notes ? `<div class="section">
 </html>`;
 }
 
-document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+// f-date removed (add booking tab removed)
 
 // Init analytics date range to current month
 (function() {
@@ -1189,10 +1189,8 @@ document.getElementById('f-date').value = new Date().toISOString().split('T')[0]
 })();
 
 initDB();
-setTimeout(() => {
-  initGoogleAuth();
-  if (typeof initSupabase === 'function') initSupabase();
-}, 300);
+// initGoogleAuth handles: check token → show login or load Supabase
+setTimeout(() => { initGoogleAuth(); }, 300);
 
 // ── ANALYTICS ──
 function setAnalyticsRange(range) {
